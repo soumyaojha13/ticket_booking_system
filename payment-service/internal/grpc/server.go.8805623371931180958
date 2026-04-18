@@ -1,0 +1,95 @@
+package grpc
+
+import (
+	"context"
+	"log"
+	"net"
+	"os"
+	"time"
+
+	"github.com/soumyaojha/ticket-booking-system/internal/mongodb"
+	"github.com/soumyaojha/ticket-booking-system/payment-service/internal/handler"
+	"github.com/soumyaojha/ticket-booking-system/payment-service/internal/repository"
+	"github.com/soumyaojha/ticket-booking-system/payment-service/internal/timer"
+	"github.com/soumyaojha/ticket-booking-system/payment-service/internal/usecase"
+	"github.com/soumyaojha/ticket-booking-system/payment-service/internal/worker"
+	seatv1 "github.com/soumyaojha/ticket-booking-system/proto/seat/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+)
+
+// StartPaymentServer starts the Payment gRPC server
+func StartPaymentServer(port string, workerPoolSize int) {
+	lis, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		log.Fatalf("Failed to listen: %v", err)
+	}
+
+	// Create inventory service client with context timeout
+	inventoryClient, err := createInventoryClient()
+	if err != nil {
+		log.Fatalf("Failed to create inventory client: %v", err)
+	}
+
+	// Initialize payment service components
+	paymentRepo := repository.NewPaymentRepo()
+	if mongodb.Enabled() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		client, db, err := mongodb.Connect(ctx)
+		if err != nil {
+			log.Fatalf("Failed to connect to MongoDB: %v", err)
+		}
+		defer func() {
+			disconnectCtx, disconnectCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer disconnectCancel()
+			_ = client.Disconnect(disconnectCtx)
+		}()
+
+		paymentRepo = repository.NewMongoPaymentRepo(db.Collection("payments"))
+		log.Printf("Payment Service connected to MongoDB database %q", db.Name())
+	}
+	paymentUsecase := usecase.NewPaymentUsecase(paymentRepo)
+	timerMgr := timer.NewManager()
+
+	// Start worker pool for queued payment confirmations (flash-sale spikes).
+	wp := worker.NewWorkerPool(workerPoolSize, 1000)
+	wp.Start()
+	defer wp.Stop()
+
+	paymentHandler := handler.NewPaymentHandler(paymentUsecase, inventoryClient, timerMgr, wp)
+
+	// Create gRPC server
+	s := grpc.NewServer()
+	seatv1.RegisterPaymentServiceServer(s, paymentHandler)
+
+	log.Printf("Payment Service starting on :%s\n", port)
+
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("Failed to serve: %v", err)
+	}
+}
+
+// createInventoryClient creates a gRPC client for the inventory service with timeout
+func createInventoryClient() (seatv1.SeatServiceClient, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	addr := os.Getenv("INVENTORY_GRPC_ADDR")
+	if addr == "" {
+		addr = "localhost:50051"
+	}
+
+	conn, err := grpc.DialContext(
+		ctx,
+		addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return seatv1.NewSeatServiceClient(conn), nil
+}

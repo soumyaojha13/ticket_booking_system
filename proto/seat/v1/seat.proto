@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package seat.v1;
+
+option go_package = "github.com/soumyaojha/ticket-booking-system/proto/seat/v1;seatv1";
+
+// ========================= SEAT SERVICE =========================
+
+service SeatService {
+  // Lock a seat (5 minute timer starts automatically)
+  rpc LockSeat(LockSeatRequest) returns (SeatResponse);
+
+  // Release seat (called on timeout or manual cancel)
+  rpc ReleaseSeat(ReleaseSeatRequest) returns (SeatResponse);
+
+  // Confirm booking after payment successful
+  rpc BookSeat(BookSeatRequest) returns (SeatResponse);
+
+  // Get current seat status
+  rpc GetSeatStatus(SeatStatusRequest) returns (SeatResponse);
+
+  // Bi-directional streaming for real-time seat updates
+  rpc SeatStream(stream SeatEvent) returns (stream SeatEvent);
+}
+
+// ========================= PAYMENT SERVICE =========================
+
+service PaymentService {
+  // Start payment timer (5 minutes)
+  rpc StartPaymentTimer(PaymentTimerRequest) returns (PaymentTimerResponse);
+
+  // Confirm payment and book seat
+  rpc ConfirmPayment(ConfirmPaymentRequest) returns (PaymentTimerResponse);
+}
+
+// ========================= SEAT MESSAGES =========================
+
+message LockSeatRequest {
+  string seat_id = 1;
+  string user_id = 2;
+  int64 lock_expiry_ms = 3; // Lock expiry in milliseconds (5 minutes = 300000)
+}
+
+message ReleaseSeatRequest {
+  string seat_id = 1;
+  string reason = 2; // TIMEOUT, MANUAL_CANCEL, PAYMENT_SUCCESSFUL
+}
+
+message BookSeatRequest {
+  string seat_id = 1;
+  string user_id = 2;
+}
+
+message SeatStatusRequest {
+  string seat_id = 1;
+}
+
+message SeatResponse {
+  string seat_id = 1;
+  string status = 2; // AVAILABLE, LOCKED, BOOKED
+  string user_id = 3;
+  int64 locked_at_ms = 4; // Timestamp when locked
+  int64 expires_at_ms = 5; // When lock expires
+}
+
+message SeatEvent {
+  string seat_id = 1;
+  string status = 2; // AVAILABLE, LOCKED, BOOKED
+  string user_id = 3;
+  int64 timestamp_ms = 4;
+}
+
+// ========================= PAYMENT MESSAGES =========================
+
+message PaymentTimerRequest {
+  string seat_id = 1;
+  string user_id = 2;
+  int32 amount = 3;
+}
+
+message PaymentTimerResponse {
+  string seat_id = 1;
+  string status = 2; // PENDING, SUCCESS, EXPIRED, CANCELLED
+  string message = 3;
+}
+
+message ConfirmPaymentRequest {
+  string seat_id = 1;
+  string user_id = 2;
+  int32 amount = 3;
+  string transaction_id = 4;
+}

@@ -1,0 +1,3 @@
+./manager.go
+./timer.go
+./manager_test.go

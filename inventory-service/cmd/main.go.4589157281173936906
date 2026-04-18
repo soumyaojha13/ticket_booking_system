@@ -1,0 +1,39 @@
+package main
+
+import (
+	"context"
+	"log"
+	"time"
+
+	"github.com/soumyaojha/ticket-booking-system/inventory-service/internal/grpc"
+	"github.com/soumyaojha/ticket-booking-system/inventory-service/internal/handler"
+	"github.com/soumyaojha/ticket-booking-system/inventory-service/internal/repository"
+	"github.com/soumyaojha/ticket-booking-system/inventory-service/internal/usecase"
+	"github.com/soumyaojha/ticket-booking-system/internal/mongodb"
+)
+
+func main() {
+	repo := repository.NewSeatRepo()
+	if mongodb.Enabled() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		client, db, err := mongodb.Connect(ctx)
+		if err != nil {
+			log.Fatalf("failed to connect to MongoDB: %v", err)
+		}
+		defer func() {
+			disconnectCtx, disconnectCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer disconnectCancel()
+			_ = client.Disconnect(disconnectCtx)
+		}()
+
+		repo = repository.NewMongoSeatRepo(db.Collection("seats"))
+		log.Printf("Inventory Service connected to MongoDB database %q", db.Name())
+	}
+
+	usecase := usecase.NewSeatUsecase(repo)
+	handler := handler.NewSeatHandler(usecase)
+
+	grpc.StartServer(handler)
+}

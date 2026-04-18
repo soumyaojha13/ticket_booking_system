@@ -1,0 +1,13 @@
+**/.git
+**/.cursor
+**/terminals
+**/agent-transcripts
+**/*.exe
+**/*.dll
+**/*.bin
+**/*.sqlite*
+**/Tor Browser
+**/node_modules
+**/dist
+**/build
+**/.DS_Store

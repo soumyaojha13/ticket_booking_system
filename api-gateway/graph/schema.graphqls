@@ -1,0 +1,63 @@
+# graph/schema.graphqls
+
+enum SeatStatus {
+  AVAILABLE
+  LOCKED
+  BOOKED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+}
+
+type Seat {
+  id: ID!
+  status: SeatStatus!
+  userId: String
+  lockedAtMs: Int
+  expiresAtMs: Int
+}
+
+type BookingResponse {
+  status: PaymentStatus!
+  message: String!
+  seatId: ID!
+  expiresAtMs: Int
+}
+
+type Query {
+  # Get seat status
+  seatStatus(seatId: ID!): Seat!
+  
+  # Get all available seats
+  availableSeats: [Seat!]!
+}
+
+type Mutation {
+  # Lock a seat and start payment timer
+  lockSeat(seatId: ID!, userId: ID!): BookingResponse!
+  
+  # Confirm payment and book seat
+  confirmPayment(seatId: ID!, userId: ID!, transactionId: String!): BookingResponse!
+  
+  # Cancel booking (release locked seat)
+  releaseSeat(seatId: ID!): String!
+}
+
+type SeatEvent {
+  seatId: ID!
+  status: SeatStatus!
+  userId: String
+  timestampMs: Int!
+}
+
+type Subscription {
+  # Subscribe to real-time seat updates
+  seatUpdated: SeatEvent!
+  
+  # Subscribe to specific seat events
+  seatEvents(seatId: ID!): SeatEvent!
+}

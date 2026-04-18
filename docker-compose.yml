@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ticket_booking
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ticket_booking"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  inventory:
+    build:
+      context: .
+      dockerfile: inventory-service/Dockerfile
+    environment:
+      INVENTORY_PORT: "50051"
+      REDIS_ADDR: "redis:6379"
+      POSTGRES_DSN: "postgres://postgres:postgres@postgres:5432/ticket_booking?sslmode=disable"
+    ports:
+      - "50051:50051"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  payment:
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    environment:
+      PAYMENT_PORT: "50052"
+      INVENTORY_GRPC_ADDR: "inventory:50051"
+      PAYMENT_WORKERS: "10"
+      POSTGRES_DSN: "postgres://postgres:postgres@postgres:5432/ticket_booking?sslmode=disable"
+    ports:
+      - "50052:50052"
+    depends_on:
+      inventory:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    environment:
+      API_GATEWAY_PORT: "8080"
+      INVENTORY_GRPC_ADDR: "inventory:50051"
+      PAYMENT_GRPC_ADDR: "payment:50052"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - inventory
+      - payment
+
+volumes:
+  postgres_data:
+
