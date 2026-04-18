@@ -84,8 +84,6 @@ jobs:
         tags: |
           ${{ secrets.DOCKER_USERNAME }}/ticket-booking-inventory:latest
           ${{ secrets.DOCKER_USERNAME }}/ticket-booking-inventory:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
 
     - name: Build and push Payment Service
       uses: docker/build-push-action@v5
@@ -96,8 +94,6 @@ jobs:
         tags: |
           ${{ secrets.DOCKER_USERNAME }}/ticket-booking-payment:latest
           ${{ secrets.DOCKER_USERNAME }}/ticket-booking-payment:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
 
     - name: Build and push API Gateway
       uses: docker/build-push-action@v5
@@ -108,8 +104,6 @@ jobs:
         tags: |
           ${{ secrets.DOCKER_USERNAME }}/ticket-booking-gateway:latest
           ${{ secrets.DOCKER_USERNAME }}/ticket-booking-gateway:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
 
   deploy:
     needs: build-and-push
